@@ -1,0 +1,178 @@
+---
+title: "Project 2"
+author: "Hannah Furumo"
+date: "3/10/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(mlbench)
+data("BreastCancer")
+```
+
+```{r}
+dim(BreastCancer)
+```
+
+```{r}
+BreastCancer <- na.omit(BreastCancer) 
+BreastCancer$Id <- NULL 
+```
+
+```{r}
+head(BreastCancer)
+```
+
+
+```{r}
+set.seed(2)
+train.index <- sample(row.names(BreastCancer), 0.6*dim(BreastCancer)[1])  
+valid.index <- setdiff(row.names(BreastCancer), train.index)  
+train.df <- BreastCancer[train.index, ]
+valid.df <- BreastCancer[valid.index, ]
+
+```
+
+```{r}
+library(caret)
+library(MASS)
+```
+
+#SVM
+```{r}
+library(e1071)
+mysvm <- svm(Class ~ ., train.df)
+mysvm.pred <- predict(mysvm, valid.df)
+table(mysvm.pred,valid.df$Class)
+```
+
+
+```{r}
+confusionMatrix(as.factor(mysvm.pred), as.factor(valid.df$Class))
+```
+
+
+
+#Naive Bayes
+```{r}
+library(klaR)
+mynb <- NaiveBayes(Class ~ ., train.df)
+mynb.pred <- predict(mynb, valid.df)
+table(mynb.pred$class,valid.df$Class)
+```
+#Neural Net
+```{r}
+library(nnet)
+mynnet <- nnet(Class ~ ., train.df, size=1)
+mynnet.pred <- predict(mynnet,valid.df ,type="class")
+table(mynnet.pred,valid.df$Class)
+```
+#Decision Trees
+```{r}
+library(rpart)
+
+mytree <- rpart(Class ~ ., train.df)
+plot(mytree); text(mytree) # in "iris_tree.ps"
+summary(mytree)
+mytree.pred <- predict(mytree,valid.df,type="class")
+table(mytree.pred,valid.df$Class)
+```
+
+
+#Regularised Discriminant Analysis
+```{r}
+myrda <- rda(Class ~ ., train.df)
+myrda.pred <- predict(myrda, valid.df)
+table(myrda.pred$class,valid.df$Class)
+```
+
+#Random Forests
+```{r}
+library(randomForest)
+myrf <- randomForest(Class ~ .,train.df)
+myrf.pred <- predict(myrf, valid.df)
+table(myrf.pred, valid.df$Class)
+```
+
+#Ensembling of Classification Results
+```{r}
+combine.classes<-data.frame(myrf.pred, myrda.pred$class,
+mytree.pred,mynnet.pred,mysvm.pred, mynb.pred$class, myrda.pred)
+```
+
+
+```{r}
+head(combine.classes)
+head(myrf.pred)
+head(myrda.pred)
+```
+
+```{r}
+str(combine.classes)
+```
+
+```{r}
+combine.classes$class<-as.numeric(combine.classes$class)
+```
+
+```{r}
+combine.classes$myrf.pred<-ifelse(combine.classes$myrf.pred=="benign", 0, 1)
+combine.classes[,2]<-ifelse(combine.classes[,2]=="benign", 0, 1)
+combine.classes[,3]<-ifelse(combine.classes[,3]=="benign", 0, 1)
+combine.classes[,4]<-ifelse(combine.classes[,4]=="benign", 0, 1)
+combine.classes[,5]<-ifelse(combine.classes[,5]=="benign", 0, 1)
+combine.classes[,6]<-ifelse(combine.classes[,6]=="benign", 0, 1)
+majority.vote=rowSums(combine.classes)
+```
+
+
+```{r}
+head(majority.vote)
+```
+
+```{r}
+str(combine.classes)
+```
+
+
+```{r}
+combine.classes[,7]<-rowSums(combine.classes)
+```
+
+
+```{r}
+combine.classes[,8]<-ifelse(combine.classes[,7]>=4, "malignant", "benign")
+```
+
+
+```{r}
+table(combine.classes[,8], combine.classes$class)
+```
+
+
+```{r}
+library(caretEnsemble)
+```
+
+
+```{r}
+my_control<-trainControl(method = "boot", number = 25, savePredictions = "final", classProbs = TRUE, index = createResample(train.df$Class, 25), summaryFunction = twoClassSummary)
+```
+
+```{r}
+control_stacking<-trainControl(method = "repeatedcv", number=5, repeats = 2, savePredictions = TRUE, classProbs = TRUE)
+alg <- c('rpart', 'knn', 'svmRadial')
+stacked<-caretList(Class ~., data = BreastCancer, trControl = my_control , methodList = alg)
+```
+
+```{r}
+stacked<-resamples(stacked)
+```
+
+#stacking with CaretEnsemble only works with caret functions (not all classification models). 
+
+```{r}
+summary(stacked)
+```
+
